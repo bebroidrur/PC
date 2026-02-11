@@ -27,6 +27,42 @@ static double computeSingle(const vector<int>& A, const vector<int>& B, int k, v
 
     return elapsed.count();
 }
+static void computeRange(const vector<int>& A, const vector<int>& B, int k,
+                         vector<int>& C, size_t begin, size_t end) {
+    for (size_t i = begin; i < end; ++i) {
+        C[i] = A[i] - k * B[i];
+    }
+}
+
+static double computeParallel(const vector<int>& A, const vector<int>& B, int k,
+                              vector<int>& C, size_t threadCount) {
+    if (threadCount < 1) threadCount = 1;
+    threadCount = min(threadCount, A.size());
+
+    vector<thread> threads;
+    threads.reserve(threadCount);
+
+    size_t n = A.size();
+    size_t chunk = n / threadCount;
+    size_t rem = n % threadCount;
+
+    auto start = high_resolution_clock::now();
+
+    size_t cur = 0;
+    for (size_t t = 0; t < threadCount; ++t) {
+        size_t begin = cur;
+        size_t end = begin + chunk + (t < rem ? 1 : 0);
+        cur = end;
+
+        threads.emplace_back(computeRange, cref(A), cref(B), k, ref(C), begin, end);
+    }
+
+    for (auto &th : threads) th.join();
+
+    auto end = high_resolution_clock::now();
+    auto elapsed = duration_cast<duration<double>>(end - start);
+    return elapsed.count();
+}
 
 int main() {
     const size_t N = 1000000;
@@ -39,10 +75,9 @@ int main() {
 
     double t1 = computeSingle(A, B, k, C);
     cout << "Single-thread time: " << t1 << " seconds\n";
-
-    cout << "First 10 C values: ";
-    for (int i = 0; i < 10; ++i) cout << C[i] << ' ';
-    cout << "\n";
+    vector<int> Cp(N);
+    double tp = computeParallel(A, B, k, Cp, 4);
+    cout << "Parallel (4 threads) time: " << tp << " seconds\n";
 
     return 0;
 }
