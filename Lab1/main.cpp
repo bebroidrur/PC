@@ -63,6 +63,9 @@ static double computeParallel(const vector<int>& A, const vector<int>& B, int k,
     auto elapsed = duration_cast<duration<double>>(end - start);
     return elapsed.count();
 }
+static bool equalVectors(const vector<int>& X, const vector<int>& Y) {
+    return X.size() == Y.size() && equal(X.begin(), X.end(), Y.begin());
+}
 
 int main() {
     const size_t N = 1000000;
@@ -78,6 +81,8 @@ int main() {
     vector<int> Cp(N);
     double tp = computeParallel(A, B, k, Cp, 4);
     cout << "Parallel (4 threads) time: " << tp << " seconds\n";
+    bool ok = equalVectors(C, Cp);
+    cout << "Check: " << (ok ? "OK (same result)" : "FAILED (different!)") << "\n";
 
     return 0;
 }
