@@ -83,6 +83,26 @@ int main() {
     cout << "Parallel (4 threads) time: " << tp << " seconds\n";
     bool ok = equalVectors(C, Cp);
     cout << "Check: " << (ok ? "OK (same result)" : "FAILED (different!)") << "\n";
+    const vector<size_t> sizes = {1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000};
+    const vector<size_t> threadsList = {4, 8, 16, 32, 64, 128};
+
+    for (size_t N : sizes) {
+        vector<int> A(N), B(N), C1(N), C2(N);
+        fillRandom(A);
+        fillRandom(B);
+        int k = 5;
+
+        double tSingle = computeSingle(A, B, k, C1);
+        cout << "\nN=" << N << "\n";
+        cout << "  single: " << tSingle << " s\n";
+
+        for (size_t th : threadsList) {
+            double tPar = computeParallel(A, B, k, C2, th);
+            bool ok = equalVectors(C1, C2);
+            cout << "  threads=" << th << ": " << tPar << " s"
+                 << " | check=" << (ok ? "OK" : "FAIL") << "\n";
+        }
+    }
 
     return 0;
 }
