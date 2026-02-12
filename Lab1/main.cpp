@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <fstream>
 
 using namespace std;
 using namespace std::chrono;
@@ -23,10 +24,10 @@ static double computeSingle(const vector<int>& A, const vector<int>& B, int k, v
     }
 
     auto end = high_resolution_clock::now();
-    auto elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(end - start);
-
+    auto elapsed = duration_cast<duration<double>>(end - start);
     return elapsed.count();
 }
+
 static void computeRange(const vector<int>& A, const vector<int>& B, int k,
                          vector<int>& C, size_t begin, size_t end) {
     for (size_t i = begin; i < end; ++i) {
@@ -63,46 +64,56 @@ static double computeParallel(const vector<int>& A, const vector<int>& B, int k,
     auto elapsed = duration_cast<duration<double>>(end - start);
     return elapsed.count();
 }
+
 static bool equalVectors(const vector<int>& X, const vector<int>& Y) {
     return X.size() == Y.size() && equal(X.begin(), X.end(), Y.begin());
 }
 
 int main() {
-    const size_t N = 1000000;
+    const vector<size_t> sizes = {1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000};
+    const vector<size_t> threadsList = {1, 2, 4, 8, 16, 32, 64, 128};
     const int k = 5;
 
-    vector<int> A(N), B(N), C(N);
-
-    fillRandom(A);
-    fillRandom(B);
-
-    double t1 = computeSingle(A, B, k, C);
-    cout << "Single-thread time: " << t1 << " seconds\n";
-    vector<int> Cp(N);
-    double tp = computeParallel(A, B, k, Cp, 4);
-    cout << "Parallel (4 threads) time: " << tp << " seconds\n";
-    bool ok = equalVectors(C, Cp);
-    cout << "Check: " << (ok ? "OK (same result)" : "FAILED (different!)") << "\n";
-    const vector<size_t> sizes = {1000, 5000, 10000, 50000, 100000, 500000, 1000000, 5000000};
-    const vector<size_t> threadsList = {4, 8, 16, 32, 64, 128};
-
     for (size_t N : sizes) {
-        vector<int> A(N), B(N), C1(N), C2(N);
+
+        string fileName = "results_" + to_string(N) + ".csv";
+        ofstream out(fileName);
+
+        if (!out.is_open()) {
+            cerr << "ERROR: cannot open " << fileName << "\n";
+            continue;
+        }
+
+        out << "threads,time_seconds,check\n";
+
+        vector<int> A(N), B(N), Csingle(N), Cpar(N);
+
         fillRandom(A);
         fillRandom(B);
-        int k = 5;
 
-        double tSingle = computeSingle(A, B, k, C1);
+        double tSingle = computeSingle(A, B, k, Csingle);
+        out << 1 << "," << tSingle << ",OK\n";
+
         cout << "\nN=" << N << "\n";
-        cout << "  single: " << tSingle << " s\n";
+        cout << "  single (1 thread): " << tSingle << " s\n";
 
         for (size_t th : threadsList) {
-            double tPar = computeParallel(A, B, k, C2, th);
-            bool ok = equalVectors(C1, C2);
+
+            if (th == 1) continue;
+
+            double tPar = computeParallel(A, B, k, Cpar, th);
+            bool ok = equalVectors(Csingle, Cpar);
+
+            out << th << "," << tPar << ","
+                << (ok ? "OK" : "FAIL") << "\n";
+
             cout << "  threads=" << th << ": " << tPar << " s"
                  << " | check=" << (ok ? "OK" : "FAIL") << "\n";
         }
+
+        out.close();
     }
 
     return 0;
 }
+
