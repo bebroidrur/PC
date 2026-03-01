@@ -6,6 +6,7 @@
 #include <random>
 #include <thread>
 #include <vector>
+#include <fstream>
 
 struct Result {
     long long countGreater = 0;
@@ -104,48 +105,66 @@ Result run_parallel_atomic_cas(const std::vector<int>& a, int X, int numThreads)
 }
 
 int main() {
-    const size_t N = 1'000'000;
     const int X = 10;
     const int numThreads = 6;
+
+    const std::vector<size_t> sizes = {
+        100'000,
+        500'000,
+        1'000'000,
+        2'000'000,
+        5'000'000
+    };
+
+    std::ofstream seqFile("sequential.csv");
+    std::ofstream mtxFile("mutex.csv");
+    std::ofstream casFile("atomic_cas.csv");
+
+    seqFile << "N,time_ms\n";
+    mtxFile << "N,time_ms\n";
+    casFile << "N,time_ms\n";
 
     std::mt19937 rng(123);
     std::uniform_int_distribution<int> dist(-100000, 100000);
 
-    std::vector<int> a(N);
-    for (size_t i = 0; i < N; ++i) a[i] = dist(rng);
+    for (size_t N : sizes) {
 
-    std::cout << "N=" << N << " X=" << X << "\n\n";
+        std::vector<int> a(N);
+        for (size_t i = 0; i < N; ++i)
+            a[i] = dist(rng);
+        Result seqRes;
+        double seqTime = measure_ms([&] {
+            seqRes = run_sequential(a, X);
+        });
+        Result mtxRes;
+        double mtxTime = measure_ms([&] {
+            mtxRes = run_parallel_mutex_blocking(a, X, numThreads);
+        });
+        Result casRes;
+        double casTime = measure_ms([&] {
+            casRes = run_parallel_atomic_cas(a, X, numThreads);
+        });
+        bool okMtx = (seqRes.countGreater == mtxRes.countGreater &&
+                      seqRes.maxVal == mtxRes.maxVal);
 
-    Result seqRes;
-    double seqTime = measure_ms([&] {
-        seqRes = run_sequential(a, X);
-    });
+        bool okCas = (seqRes.countGreater == casRes.countGreater &&
+                      seqRes.maxVal == casRes.maxVal);
 
-    Result parRes;
-    double parTime = measure_ms([&] {
-        parRes =  run_parallel_mutex_blocking(a, X, numThreads);
-    });
-    Result casRes;
-    double casTime = measure_ms([&] { casRes = run_parallel_atomic_cas(a, X, numThreads); });
+        if (!okMtx || !okCas) {
+            std::cout << "ERROR at N=" << N << "\n";
+        }
+        seqFile << N << "," << seqTime << "\n";
+        mtxFile << N << "," << mtxTime << "\n";
+        casFile << N << "," << casTime << "\n";
 
-    std::cout << "Sequential:\n";
-    std::cout << "  countGreater=" << seqRes.countGreater << " maxVal=" << seqRes.maxVal
-              << " time_ms=" << seqTime << "\n\n";
+        std::cout << "Done N=" << N << "\n";
+    }
 
-    std::cout << "Parallel (mutex blocking):\n";
-    std::cout << "  countGreater=" << parRes.countGreater << " maxVal=" << parRes.maxVal
-              << " time_ms=" << parTime
-              << ((seqRes.countGreater == parRes.countGreater && seqRes.maxVal == parRes.maxVal) ? " [OK]" : " [ERROR]")
-              << "\n\n";
+    seqFile.close();
+    mtxFile.close();
+    casFile.close();
 
-    std::cout << "Parallel (atomic + CAS):\n";
-    std::cout << "  countGreater=" << casRes.countGreater << " maxVal=" << casRes.maxVal
-              << " time_ms=" << casTime
-              << ((seqRes.countGreater == casRes.countGreater && seqRes.maxVal == casRes.maxVal) ? " [OK]" : " [ERROR]")
-              << "\n\n";
-
-    if (parTime > 0) std::cout << "Speedup Seq/Mutex = " << (seqTime / parTime) << "\n";
-    if (casTime > 0) std::cout << "Speedup Seq/CAS   = " << (seqTime / casTime) << "\n";
+    std::cout << "CSV files created successfully.\n";
 
     return 0;
 }
