@@ -3,6 +3,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <deque>
 #include <mutex>
 #include <random>
@@ -14,7 +15,7 @@ constexpr int MAX_TASK_TIME = 12;
 constexpr int QUEUE_COUNT = 3;
 constexpr int WORKERS_PER_QUEUE = 2;
 constexpr int MAX_QUEUE_SIZE = 10;
-
+constexpr int GENERATOR_COUNT = 2;
 struct Task {
     int id{};
     int durationSec{};
@@ -40,6 +41,7 @@ private:
     void workerRoutine(int queueId);
 private:
     mutable std::mutex queuesMutex_;
+    mutable std::mutex coutMutex_;
     std::condition_variable taskAvailable_;
 
     std::vector<std::deque<Task>> queues_;

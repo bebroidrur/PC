@@ -4,6 +4,7 @@
 #include <chrono>
 #include <iostream>
 #include <numeric>
+#include <random>
 
 ThreadPool::ThreadPool() : queues_(QUEUE_COUNT) {}
 
@@ -89,10 +90,14 @@ bool ThreadPool::submitTask(const Task& task) {
 
         for (int queueId : indices) {
             if (tryPushToQueue(queueId, task)) {
-                std::cout << "Task " << task.id
-                          << " added to queue " << queueId
-                          << ", current size = " << queues_[queueId].size()
-                          << '\n';
+                {
+                    std::lock_guard<std::mutex> coutLock(coutMutex_);
+                    std::cout << "Task " << task.id
+                              << " added to queue " << queueId
+                              << ", current size = " << queues_[queueId].size()
+                              << '\n';
+                }
+
                 taskAvailable_.notify_one();
                 return true;
             }
@@ -100,7 +105,12 @@ bool ThreadPool::submitTask(const Task& task) {
     }
 
     ++rejectedTasks_;
-    std::cout << "Task " << task.id << " rejected: all queues are full\n";
+
+    {
+        std::lock_guard<std::mutex> coutLock(coutMutex_);
+        std::cout << "Task " << task.id << " rejected: all queues are full\n";
+    }
+
     return false;
 }
 
@@ -124,14 +134,20 @@ void ThreadPool::workerRoutine(int queueId) {
             }
         }
 
-        std::cout << "Worker from queue " << queueId
-                  << " started task " << task.id
-                  << " for " << task.durationSec << " sec\n";
+        {
+            std::lock_guard<std::mutex> coutLock(coutMutex_);
+            std::cout << "Worker from queue " << queueId
+                      << " started task " << task.id
+                      << " for " << task.durationSec << " sec\n";
+        }
 
         std::this_thread::sleep_for(std::chrono::seconds(task.durationSec));
 
-        std::cout << "Worker from queue " << queueId
-                  << " completed task " << task.id << '\n';
+        {
+            std::lock_guard<std::mutex> coutLock(coutMutex_);
+            std::cout << "Worker from queue " << queueId
+                      << " completed task " << task.id << '\n';
+        }
     }
 }
 
