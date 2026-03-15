@@ -1,3 +1,5 @@
+#ifndef THREAD_POOL_H
+#define THREAD_POOL_H
 #pragma once
 
 #include <atomic>
@@ -36,6 +38,8 @@ public:
     [[nodiscard]] std::size_t getQueueSize(int queueId) const;
     [[nodiscard]] std::size_t getTotalTasks() const;
     [[nodiscard]] int getRejectedTasks() const;
+    [[nodiscard]] int getCompletedTasks() const;
+    [[nodiscard]] int getWorkerCount() const;
 
 private:
     bool tryPushToQueue(int queueId, const Task& task);
@@ -53,5 +57,8 @@ private:
     std::atomic<bool> initialized_{false};
     std::atomic<bool> terminated_{false};
     std::atomic<bool> paused_{false};
+
     std::atomic<int> rejectedTasks_{0};
+    std::atomic<int> completedTasks_{0};
 };
+#endif

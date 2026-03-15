@@ -170,6 +170,8 @@ void ThreadPool::workerRoutine(int queueId) {
 
         std::this_thread::sleep_for(std::chrono::seconds(task.durationSec));
 
+        ++completedTasks_;
+
         {
             std::lock_guard<std::mutex> coutLock(coutMutex_);
             std::cout << "Worker from queue " << queueId
@@ -200,4 +202,12 @@ std::size_t ThreadPool::getTotalTasks() const {
 
 int ThreadPool::getRejectedTasks() const {
     return rejectedTasks_.load();
+}
+
+int ThreadPool::getCompletedTasks() const {
+    return completedTasks_.load();
+}
+
+int ThreadPool::getWorkerCount() const {
+    return QUEUE_COUNT * WORKERS_PER_QUEUE;
 }
