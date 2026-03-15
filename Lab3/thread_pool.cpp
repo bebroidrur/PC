@@ -16,6 +16,14 @@ void ThreadPool::initialize() {
         return;
     }
 
+    terminated_ = false;
+
+    for (int queueId = 0; queueId < QUEUE_COUNT; ++queueId) {
+        for (int i = 0; i < WORKERS_PER_QUEUE; ++i) {
+            workers_.emplace_back(&ThreadPool::workerRoutine, this, queueId);
+        }
+    }
+
     initialized_ = true;
 }
 
@@ -25,6 +33,7 @@ void ThreadPool::terminate() {
     }
 
     terminated_ = true;
+    taskAvailable_.notify_all();
 
     for (auto& worker : workers_) {
         if (worker.joinable()) {
@@ -49,33 +58,81 @@ bool ThreadPool::tryPushToQueue(int queueId, const Task& task) {
     return true;
 }
 
+bool ThreadPool::tryPopFromQueue(int queueId, Task& task) {
+    if (queueId < 0 || queueId >= QUEUE_COUNT) {
+        return false;
+    }
+
+    if (queues_[queueId].empty()) {
+        return false;
+    }
+
+    task = queues_[queueId].front();
+    queues_[queueId].pop_front();
+    return true;
+}
+
 bool ThreadPool::submitTask(const Task& task) {
     if (!initialized_ || terminated_) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(queuesMutex_);
+    {
+        std::lock_guard<std::mutex> lock(queuesMutex_);
 
-    std::vector<int> indices(QUEUE_COUNT);
-    std::iota(indices.begin(), indices.end(), 0);
+        std::vector<int> indices(QUEUE_COUNT);
+        std::iota(indices.begin(), indices.end(), 0);
 
-    std::mt19937 gen(static_cast<unsigned>(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
-    std::shuffle(indices.begin(), indices.end(), gen);
+        std::mt19937 gen(static_cast<unsigned>(
+            std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::shuffle(indices.begin(), indices.end(), gen);
 
-    for (int queueId : indices) {
-        if (tryPushToQueue(queueId, task)) {
-            std::cout << "Task " << task.id
-                      << " added to queue " << queueId
-                      << ", current size = " << queues_[queueId].size()
-                      << '\n';
-            return true;
+        for (int queueId : indices) {
+            if (tryPushToQueue(queueId, task)) {
+                std::cout << "Task " << task.id
+                          << " added to queue " << queueId
+                          << ", current size = " << queues_[queueId].size()
+                          << '\n';
+                taskAvailable_.notify_one();
+                return true;
+            }
         }
     }
 
     ++rejectedTasks_;
     std::cout << "Task " << task.id << " rejected: all queues are full\n";
     return false;
+}
+
+void ThreadPool::workerRoutine(int queueId) {
+    while (true) {
+        Task task;
+
+        {
+            std::unique_lock<std::mutex> lock(queuesMutex_);
+
+            taskAvailable_.wait(lock, [this, queueId] {
+                return terminated_ || !queues_[queueId].empty();
+            });
+
+            if (terminated_ && queues_[queueId].empty()) {
+                return;
+            }
+
+            if (!tryPopFromQueue(queueId, task)) {
+                continue;
+            }
+        }
+
+        std::cout << "Worker from queue " << queueId
+                  << " started task " << task.id
+                  << " for " << task.durationSec << " sec\n";
+
+        std::this_thread::sleep_for(std::chrono::seconds(task.durationSec));
+
+        std::cout << "Worker from queue " << queueId
+                  << " completed task " << task.id << '\n';
+    }
 }
 
 std::size_t ThreadPool::getQueueSize(int queueId) const {

@@ -36,12 +36,15 @@ public:
 
 private:
     bool tryPushToQueue(int queueId, const Task& task);
-
+    bool tryPopFromQueue(int queueId, Task& task);
+    void workerRoutine(int queueId);
 private:
     mutable std::mutex queuesMutex_;
-    std::vector<std::deque<Task>> queues_;
+    std::condition_variable taskAvailable_;
 
+    std::vector<std::deque<Task>> queues_;
     std::vector<std::thread> workers_;
+
     std::atomic<bool> initialized_{false};
     std::atomic<bool> terminated_{false};
     std::atomic<int> rejectedTasks_{0};
