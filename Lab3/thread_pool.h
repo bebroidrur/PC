@@ -3,9 +3,8 @@
 #pragma once
 
 #include <atomic>
-#include <functional>
+#include <deque>
 #include <mutex>
-#include <queue>
 #include <random>
 #include <thread>
 #include <vector>
@@ -29,9 +28,22 @@ public:
     void initialize();
     void terminate();
 
+    bool submitTask(const Task& task);
+
+    [[nodiscard]] std::size_t getQueueSize(int queueId) const;
+    [[nodiscard]] std::size_t getTotalTasks() const;
+    [[nodiscard]] int getRejectedTasks() const;
+
 private:
+    bool tryPushToQueue(int queueId, const Task& task);
+
+private:
+    mutable std::mutex queuesMutex_;
+    std::vector<std::deque<Task>> queues_;
+
     std::vector<std::thread> workers_;
     std::atomic<bool> initialized_{false};
     std::atomic<bool> terminated_{false};
-};
+    std::atomic<int> rejectedTasks_{0};
+};;
 #endif

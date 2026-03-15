@@ -7,11 +7,24 @@ int main() {
     std::cout << "Workers per queue: " << WORKERS_PER_QUEUE << '\n';
     std::cout << "Max queue size: " << MAX_QUEUE_SIZE << '\n';
     std::cout << "Task duration: from " << MIN_TASK_TIME
-              << " to " << MAX_TASK_TIME << " seconds\n";
+              << " to " << MAX_TASK_TIME << " seconds\n\n";
 
     ThreadPool pool;
     pool.initialize();
-    pool.terminate();
 
+    for (int i = 0; i < 35; ++i) {
+        Task task{i, MIN_TASK_TIME + (i % (MAX_TASK_TIME - MIN_TASK_TIME + 1))};
+        pool.submitTask(task);
+    }
+
+    std::cout << "\nFinal queue state:\n";
+    for (int i = 0; i < QUEUE_COUNT; ++i) {
+        std::cout << "Queue " << i << ": " << pool.getQueueSize(i) << " tasks\n";
+    }
+
+    std::cout << "Total tasks in queues: " << pool.getTotalTasks() << '\n';
+    std::cout << "Rejected tasks: " << pool.getRejectedTasks() << '\n';
+
+    pool.terminate();
     return 0;
 }
