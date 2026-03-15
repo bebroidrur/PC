@@ -18,6 +18,7 @@ void ThreadPool::initialize() {
     }
 
     terminated_ = false;
+    paused_ = false;
 
     for (int queueId = 0; queueId < QUEUE_COUNT; ++queueId) {
         for (int i = 0; i < WORKERS_PER_QUEUE; ++i) {
@@ -44,6 +45,28 @@ void ThreadPool::terminate() {
 
     workers_.clear();
     initialized_ = false;
+}
+
+void ThreadPool::pause() {
+    paused_ = true;
+
+    std::lock_guard<std::mutex> coutLock(coutMutex_);
+    std::cout << "\n=== THREAD POOL PAUSED ===\n";
+}
+
+void ThreadPool::resume() {
+    paused_ = false;
+
+    {
+        std::lock_guard<std::mutex> coutLock(coutMutex_);
+        std::cout << "\n=== THREAD POOL RESUMED ===\n";
+    }
+
+    taskAvailable_.notify_all();
+}
+
+bool ThreadPool::isPaused() const {
+    return paused_.load();
 }
 
 bool ThreadPool::tryPushToQueue(int queueId, const Task& task) {
@@ -122,11 +145,15 @@ void ThreadPool::workerRoutine(int queueId) {
             std::unique_lock<std::mutex> lock(queuesMutex_);
 
             taskAvailable_.wait(lock, [this, queueId] {
-                return terminated_ || !queues_[queueId].empty();
+                return terminated_ || (!paused_ && !queues_[queueId].empty());
             });
 
             if (terminated_ && queues_[queueId].empty()) {
                 return;
+            }
+
+            if (paused_) {
+                continue;
             }
 
             if (!tryPopFromQueue(queueId, task)) {

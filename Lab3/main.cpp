@@ -53,7 +53,19 @@ int main() {
                                 std::ref(nextTaskId));
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    std::this_thread::sleep_for(std::chrono::seconds(8));
+    pool.pause();
+
+    std::this_thread::sleep_for(std::chrono::seconds(6));
+
+    std::cout << "\nQueue state during pause:\n";
+    for (int i = 0; i < QUEUE_COUNT; ++i) {
+        std::cout << "Queue " << i << ": " << pool.getQueueSize(i) << " tasks\n";
+    }
+
+    pool.resume();
+
+    std::this_thread::sleep_for(std::chrono::seconds(8));
     stopFlag = true;
 
     for (auto& generator : generators) {
@@ -64,7 +76,7 @@ int main() {
 
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    std::cout << "\nCurrent queue state:\n";
+    std::cout << "\nFinal queue state:\n";
     for (int i = 0; i < QUEUE_COUNT; ++i) {
         std::cout << "Queue " << i << ": " << pool.getQueueSize(i) << " tasks\n";
     }

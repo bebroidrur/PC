@@ -1,12 +1,9 @@
-#ifndef THREAD_POOL_H
-#define THREAD_POOL_H
 #pragma once
 
 #include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
-#include <random>
 #include <thread>
 #include <vector>
 
@@ -16,6 +13,7 @@ constexpr int QUEUE_COUNT = 3;
 constexpr int WORKERS_PER_QUEUE = 2;
 constexpr int MAX_QUEUE_SIZE = 10;
 constexpr int GENERATOR_COUNT = 2;
+
 struct Task {
     int id{};
     int durationSec{};
@@ -29,6 +27,10 @@ public:
     void initialize();
     void terminate();
 
+    void pause();
+    void resume();
+    [[nodiscard]] bool isPaused() const;
+
     bool submitTask(const Task& task);
 
     [[nodiscard]] std::size_t getQueueSize(int queueId) const;
@@ -39,6 +41,7 @@ private:
     bool tryPushToQueue(int queueId, const Task& task);
     bool tryPopFromQueue(int queueId, Task& task);
     void workerRoutine(int queueId);
+
 private:
     mutable std::mutex queuesMutex_;
     mutable std::mutex coutMutex_;
@@ -49,6 +52,6 @@ private:
 
     std::atomic<bool> initialized_{false};
     std::atomic<bool> terminated_{false};
+    std::atomic<bool> paused_{false};
     std::atomic<int> rejectedTasks_{0};
-};;
-#endif
+};
