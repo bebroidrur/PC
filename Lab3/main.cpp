@@ -121,6 +121,10 @@ int main() {
     std::cout << "Worker threads created: " << pool.getWorkerCount() << '\n';
     std::cout << "Generator threads created: " << GENERATOR_COUNT << '\n';
 
+    std::cout << "Total full queue time: " << pool.getTotalFullTime() << " sec\n";
+    std::cout << "Min full queue time: " << pool.getMinFullTime() << " sec\n";
+    std::cout << "Max full queue time: " << pool.getMaxFullTime() << " sec\n";
+
     pool.terminate();
     return 0;
 }

@@ -3,10 +3,13 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <random>
 
-ThreadPool::ThreadPool() : queues_(QUEUE_COUNT) {}
+ThreadPool::ThreadPool()
+    : queues_(QUEUE_COUNT),
+      queueStats_(QUEUE_COUNT) {}
 
 ThreadPool::~ThreadPool() {
     terminate();
@@ -69,6 +72,32 @@ bool ThreadPool::isPaused() const {
     return paused_.load();
 }
 
+void ThreadPool::onQueueStateAfterPush(int queueId) {
+    if (queueId < 0 || queueId >= QUEUE_COUNT) {
+        return;
+    }
+
+    if (queues_[queueId].size() == MAX_QUEUE_SIZE && !queueStats_[queueId].isFull) {
+        queueStats_[queueId].isFull = true;
+        queueStats_[queueId].fullStart = std::chrono::steady_clock::now();
+    }
+}
+
+void ThreadPool::onQueueStateAfterPop(int queueId) {
+    if (queueId < 0 || queueId >= QUEUE_COUNT) {
+        return;
+    }
+
+    if (queueStats_[queueId].isFull && queues_[queueId].size() < MAX_QUEUE_SIZE) {
+        const auto fullEnd = std::chrono::steady_clock::now();
+        const double durationSec =
+            std::chrono::duration<double>(fullEnd - queueStats_[queueId].fullStart).count();
+
+        queueStats_[queueId].fullDurationsSec.push_back(durationSec);
+        queueStats_[queueId].isFull = false;
+    }
+}
+
 bool ThreadPool::tryPushToQueue(int queueId, const Task& task) {
     if (queueId < 0 || queueId >= QUEUE_COUNT) {
         return false;
@@ -79,6 +108,7 @@ bool ThreadPool::tryPushToQueue(int queueId, const Task& task) {
     }
 
     queues_[queueId].push_back(task);
+    onQueueStateAfterPush(queueId);
     return true;
 }
 
@@ -93,6 +123,7 @@ bool ThreadPool::tryPopFromQueue(int queueId, Task& task) {
 
     task = queues_[queueId].front();
     queues_[queueId].pop_front();
+    onQueueStateAfterPop(queueId);
     return true;
 }
 
@@ -210,4 +241,46 @@ int ThreadPool::getCompletedTasks() const {
 
 int ThreadPool::getWorkerCount() const {
     return QUEUE_COUNT * WORKERS_PER_QUEUE;
+}
+
+double ThreadPool::getTotalFullTime() const {
+    std::lock_guard<std::mutex> lock(queuesMutex_);
+
+    double total = 0.0;
+    for (const auto& stat : queueStats_) {
+        for (double duration : stat.fullDurationsSec) {
+            total += duration;
+        }
+    }
+    return total;
+}
+
+double ThreadPool::getMinFullTime() const {
+    std::lock_guard<std::mutex> lock(queuesMutex_);
+
+    double minValue = std::numeric_limits<double>::max();
+    bool found = false;
+
+    for (const auto& stat : queueStats_) {
+        for (double duration : stat.fullDurationsSec) {
+            minValue = std::min(minValue, duration);
+            found = true;
+        }
+    }
+
+    return found ? minValue : 0.0;
+}
+
+double ThreadPool::getMaxFullTime() const {
+    std::lock_guard<std::mutex> lock(queuesMutex_);
+
+    double maxValue = 0.0;
+
+    for (const auto& stat : queueStats_) {
+        for (double duration : stat.fullDurationsSec) {
+            maxValue = std::max(maxValue, duration);
+        }
+    }
+
+    return maxValue;
 }
