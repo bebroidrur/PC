@@ -2,6 +2,7 @@
 #define SERVER_H
 class Server {
 public:
+    Server() = default;
     void start();
 };
 

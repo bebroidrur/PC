@@ -2,5 +2,5 @@
 #include <iostream>
 
 void Client::start() {
-    std::cout << "Client start\n";
+    std::cout << "Client is running...\n";
 }

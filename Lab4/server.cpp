@@ -2,5 +2,5 @@
 #include <iostream>
 
 void Server::start() {
-    std::cout << "Server start\n";
+    std::cout << "Server is running...\n";
 }
