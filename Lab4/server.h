@@ -2,8 +2,12 @@
 #define SERVER_H
 class Server {
 public:
-    Server() = default;
+    Server(int port = 8080);
     void start();
+
+private:
+    int port_;
+    int server_fd_;
 };
 
 #endif //SERVER_H
