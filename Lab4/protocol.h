@@ -9,6 +9,13 @@ namespace Protocol {
     const string EXIT = "EXIT";
     const string OK = "OK";
     const string ERROR = "ERROR";
+
+    const string CONFIG = "CONFIG";
+    const string DATA = "DATA";
+    const string START = "START";
+    const string STATUS = "STATUS";
+    const string RESULT = "RESULT";
 }
+
 
 #endif
