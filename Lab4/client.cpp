@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <thread>
+#include <chrono>
 #include <cstring>
 
 #include <sys/socket.h>
@@ -60,8 +62,8 @@ void Client::start() {
         return string(buffer);
     };
 
-    vector<int> A = {10, 20, 30, 40, 50};
-    vector<int> B = {1, 2, 3, 4, 5};
+    vector<int> A = {10, 20, 30, 40, 50, 60, 70, 80};
+    vector<int> B = {1, 2, 3, 4, 5, 6, 7, 8};
     int k = 2;
     int threadCount = 4;
 
@@ -86,7 +88,13 @@ void Client::start() {
 
     sendCommand(dataCommand);
     sendCommand(Protocol::START);
-    sendCommand(Protocol::STATUS);
+
+    string status;
+    do {
+        this_thread::sleep_for(chrono::milliseconds(150));
+        status = sendCommand(Protocol::STATUS);
+    } while (status == "IN_PROGRESS");
+
     sendCommand(Protocol::RESULT);
     sendCommand(Protocol::EXIT);
 

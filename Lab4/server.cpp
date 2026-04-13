@@ -3,6 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <chrono>
 #include <cstring>
 
 #include <sys/socket.h>
@@ -19,6 +20,12 @@ Server::Server(int port)
       k_(0),
       isProcessing_(false),
       isDone_(false) {}
+
+Server::~Server() {
+    if (computationThread_.joinable()) {
+        computationThread_.join();
+    }
+}
 
 vector<int> Server::parseArray(const string& values) {
     vector<int> result;
@@ -43,30 +50,46 @@ string Server::buildResultString() const {
     return ss.str();
 }
 
-void Server::startComputation() {
-    if (A_.empty() || B_.empty() || dataSize_ <= 0 || threadCount_ <= 0) {
+void Server::runComputation() {
+    vector<int> localA;
+    vector<int> localB;
+    int localK;
+    int localSize;
+    int localThreadCount;
+
+    {
+        lock_guard<mutex> lock(dataMutex_);
+        localA = A_;
+        localB = B_;
+        localK = k_;
+        localSize = dataSize_;
+        localThreadCount = threadCount_;
+        C_.assign(localSize, 0);
+    }
+
+    if (localA.empty() || localB.empty() || localSize <= 0 || localThreadCount <= 0) {
+        isProcessing_ = false;
+        isDone_ = false;
         return;
     }
 
-    isProcessing_ = true;
-    isDone_ = false;
-
-    C_.assign(dataSize_, 0);
-
     vector<thread> workers;
-    int chunkSize = dataSize_ / threadCount_;
-    int remainder = dataSize_ % threadCount_;
+    int chunkSize = localSize / localThreadCount;
+    int remainder = localSize % localThreadCount;
 
     int startIndex = 0;
 
-    for (int i = 0; i < threadCount_; i++) {
+    for (int i = 0; i < localThreadCount; i++) {
         int currentChunk = chunkSize + (i < remainder ? 1 : 0);
         int endIndex = startIndex + currentChunk;
 
-        workers.emplace_back([=, this]() {
+        workers.emplace_back([=, this, &localA, &localB]() {
             for (int j = startIndex; j < endIndex; j++) {
-                C_[j] = A_[j] - k_ * B_[j];
+                lock_guard<mutex> lock(dataMutex_);
+                C_[j] = localA[j] - localK * localB[j];
             }
+
+            this_thread::sleep_for(chrono::milliseconds(200));
         });
 
         startIndex = endIndex;
@@ -94,11 +117,16 @@ string Server::processCommand(const string& command) {
     if (command.rfind(Protocol::CONFIG, 0) == 0) {
         stringstream ss(command);
         string cmd;
-        ss >> cmd >> threadCount_;
+        int tempThreadCount;
 
-        if (threadCount_ <= 0) {
+        ss >> cmd >> tempThreadCount;
+
+        if (tempThreadCount <= 0) {
             return Protocol::ERROR;
         }
+
+        lock_guard<mutex> lock(dataMutex_);
+        threadCount_ = tempThreadCount;
 
         cout << "Configured thread count: " << threadCount_ << '\n';
         return Protocol::OK;
@@ -120,40 +148,68 @@ string Server::processCommand(const string& command) {
 
         stringstream hs(header);
         string cmd;
-        hs >> cmd >> dataSize_;
+        int tempDataSize;
 
-        if (dataSize_ <= 0) {
+        hs >> cmd >> tempDataSize;
+
+        if (tempDataSize <= 0) {
             return Protocol::ERROR;
         }
 
-        A_ = parseArray(aValues);
-        B_ = parseArray(bValues);
+        vector<int> tempA = parseArray(aValues);
+        vector<int> tempB = parseArray(bValues);
 
         stringstream ks(kValue);
-        ks >> k_;
+        int tempK;
+        ks >> tempK;
 
-        if (A_.size() != dataSize_ || B_.size() != dataSize_) {
+        if (tempA.size() != tempDataSize || tempB.size() != tempDataSize) {
             return Protocol::ERROR;
         }
+
+        {
+            lock_guard<mutex> lock(dataMutex_);
+            dataSize_ = tempDataSize;
+            A_ = tempA;
+            B_ = tempB;
+            k_ = tempK;
+            C_.clear();
+        }
+
+        isDone_ = false;
+        isProcessing_ = false;
 
         cout << "Received DATA command\n";
         cout << "Size: " << dataSize_ << '\n';
         cout << "k: " << k_ << '\n';
 
-        isDone_ = false;
-        isProcessing_ = false;
-        C_.clear();
-
         return Protocol::OK;
     }
 
     if (command == Protocol::START) {
-        if (A_.empty() || B_.empty() || threadCount_ <= 0) {
-            return Protocol::ERROR;
+        if (isProcessing_) {
+            return "ALREADY_RUNNING";
         }
 
-        cout << "Starting computation...\n";
-        startComputation();
+        {
+            lock_guard<mutex> lock(dataMutex_);
+
+            if (A_.empty() || B_.empty() || threadCount_ <= 0 || dataSize_ <= 0) {
+                return Protocol::ERROR;
+            }
+        }
+
+        if (computationThread_.joinable()) {
+            computationThread_.join();
+        }
+
+        isProcessing_ = true;
+        isDone_ = false;
+
+        cout << "Starting computation asynchronously...\n";
+
+        computationThread_ = thread(&Server::runComputation, this);
+
         return Protocol::OK;
     }
 
@@ -170,10 +226,15 @@ string Server::processCommand(const string& command) {
     }
 
     if (command == Protocol::RESULT) {
+        if (isProcessing_) {
+            return "IN_PROGRESS";
+        }
+
         if (!isDone_) {
             return Protocol::ERROR;
         }
 
+        lock_guard<mutex> lock(dataMutex_);
         return buildResultString();
     }
 

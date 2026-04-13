@@ -4,12 +4,16 @@
 #include <string>
 #include <vector>
 #include <atomic>
+#include <thread>
+#include <mutex>
 
 using namespace std;
 
 class Server {
 public:
     Server(int port = 8080);
+    ~Server();
+
     void start();
 
 private:
@@ -27,10 +31,14 @@ private:
     atomic<bool> isProcessing_;
     atomic<bool> isDone_;
 
+    thread computationThread_;
+    mutex dataMutex_;
+
     void handleClient(int clientSocket);
     string processCommand(const string& command);
     vector<int> parseArray(const string& values);
-    void startComputation();
+
+    void runComputation();
     string buildResultString() const;
 };
 
