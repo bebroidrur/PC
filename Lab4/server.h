@@ -6,6 +6,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <memory>
 
 using namespace std;
 
@@ -17,29 +18,39 @@ public:
     void start();
 
 private:
+    struct ClientSession {
+        int socket;
+        int threadCount;
+        int dataSize;
+        int k;
+
+        vector<int> A;
+        vector<int> B;
+        vector<int> C;
+
+        atomic<bool> isProcessing;
+        atomic<bool> isDone;
+
+        thread computationThread;
+        mutex dataMutex;
+
+        ClientSession(int clientSocket)
+            : socket(clientSocket),
+              threadCount(0),
+              dataSize(0),
+              k(0),
+              isProcessing(false),
+              isDone(false) {}
+    };
+
     int port_;
     int server_fd_;
 
-    int threadCount_;
-    int dataSize_;
-    int k_;
-
-    vector<int> A_;
-    vector<int> B_;
-    vector<int> C_;
-
-    atomic<bool> isProcessing_;
-    atomic<bool> isDone_;
-
-    thread computationThread_;
-    mutex dataMutex_;
-
-    void handleClient(int clientSocket);
-    string processCommand(const string& command);
+    void handleClient(shared_ptr<ClientSession> session);
+    string processCommand(shared_ptr<ClientSession> session, const string& command);
     vector<int> parseArray(const string& values);
-
-    void runComputation();
-    string buildResultString() const;
+    void runComputation(shared_ptr<ClientSession> session);
+    string buildResultString(shared_ptr<ClientSession> session) const;
 };
 
 #endif
