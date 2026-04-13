@@ -1,4 +1,5 @@
 #include "client.h"
+#include "protocol.h"
 #include <iostream>
 #include <cstring>
 
@@ -6,7 +7,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-Client::Client(const std::string& serverIp, int port)
+using namespace std;
+
+Client::Client(const string& serverIp, int port)
     : serverIp_(serverIp), port_(port) {}
 
 void Client::start() {
@@ -32,18 +35,31 @@ void Client::start() {
         return;
     }
 
-    std::cout << "Connected to server\n";
+    cout << "Connected to server\n";
 
-    const char* message = "Hello from client";
-    ssize_t sentBytes = send(sock, message, std::strlen(message), 0);
-
-    if (sentBytes < 0) {
+    string command = Protocol::PING;
+    if (send(sock, command.c_str(), command.size(), 0) < 0) {
         perror("Send failed");
         close(sock);
         return;
     }
 
-    std::cout << "Message sent to server\n";
+    cout << "Command sent: " << command << '\n';
+
+    char buffer[1024] = {0};
+    ssize_t receivedBytes = recv(sock, buffer, sizeof(buffer) - 1, 0);
+
+    if (receivedBytes < 0) {
+        perror("Receive failed");
+        close(sock);
+        return;
+    }
+
+    buffer[receivedBytes] = '\0';
+    cout << "Response from server: " << buffer << '\n';
+
+    string exitCommand = Protocol::EXIT;
+    send(sock, exitCommand.c_str(), exitCommand.size(), 0);
 
     close(sock);
 }

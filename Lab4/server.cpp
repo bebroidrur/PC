@@ -1,10 +1,14 @@
 #include "server.h"
+#include "protocol.h"
 #include <iostream>
 #include <cstring>
+#include <string>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+
+using namespace std;
 
 Server::Server(int port) : port_(port), server_fd_(-1) {}
 
@@ -15,7 +19,7 @@ void Server::start() {
         return;
     }
 
-    std::cout << "Socket created\n";
+    cout << "Socket created\n";
 
     int opt = 1;
     if (setsockopt(server_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
@@ -35,7 +39,7 @@ void Server::start() {
         return;
     }
 
-    std::cout << "Bind successful\n";
+    cout << "Bind successful\n";
 
     if (listen(server_fd_, 5) < 0) {
         perror("Listen failed");
@@ -43,7 +47,7 @@ void Server::start() {
         return;
     }
 
-    std::cout << "Server listening on port " << port_ << "...\n";
+    cout << "Server listening on port " << port_ << "...\n";
 
     while (true) {
         int client_socket = accept(server_fd_, nullptr, nullptr);
@@ -52,18 +56,44 @@ void Server::start() {
             continue;
         }
 
-        std::cout << "Client connected\n";
+        cout << "Client connected\n";
 
-        char buffer[1024] = {0};
-        ssize_t receivedBytes = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
+        while (true) {
+            char buffer[1024] = {0};
+            ssize_t receivedBytes = recv(client_socket, buffer, sizeof(buffer) - 1, 0);
 
-        if (receivedBytes < 0) {
-            perror("Receive failed");
-        } else if (receivedBytes == 0) {
-            std::cout << "Client disconnected without sending data\n";
-        } else {
+            if (receivedBytes < 0) {
+                perror("Receive failed");
+                break;
+            }
+
+            if (receivedBytes == 0) {
+                cout << "Client disconnected\n";
+                break;
+            }
+
             buffer[receivedBytes] = '\0';
-            std::cout << "Received from client: " << buffer << '\n';
+            string command(buffer);
+
+            cout << "Received command: " << command << '\n';
+
+            string response;
+
+            if (command == Protocol::PING) {
+                response = Protocol::PONG;
+            } else if (command == Protocol::EXIT) {
+                response = Protocol::OK;
+                send(client_socket, response.c_str(), response.size(), 0);
+                cout << "Client session finished\n";
+                break;
+            } else {
+                response = Protocol::ERROR;
+            }
+
+            if (send(client_socket, response.c_str(), response.size(), 0) < 0) {
+                perror("Send failed");
+                break;
+            }
         }
 
         close(client_socket);
