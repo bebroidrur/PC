@@ -3,6 +3,7 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <thread>
 #include <unistd.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -15,6 +16,7 @@ using namespace std;
 string readFile(const string& filePath) {
     ifstream file(filePath);
     if (!file.is_open()) {
+        cout << "Failed to open file: " << filePath << '\n';
         return "";
     }
 
@@ -30,8 +32,70 @@ string getRequestedPath(const string& request) {
     string version;
 
     requestStream >> method >> path >> version;
-
     return path;
+}
+
+void handleClient(int clientSocket) {
+    char buffer[BUFFER_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+
+    ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived <= 0) {
+        close(clientSocket);
+        return;
+    }
+
+    string request(buffer);
+
+    cout << "\n--- HTTP REQUEST START ---\n";
+    cout << request << '\n';
+    cout << "--- HTTP REQUEST END ---\n\n";
+
+    string path = getRequestedPath(request);
+    string filePath;
+
+    if (path == "/") {
+        filePath = "site/index.html";
+    } else if (path == "/page2.html") {
+        filePath = "site/page2.html";
+    } else {
+        filePath = "site/" + path.substr(1);
+    }
+    cout << "Requested path: " << path << '\n';
+    cout << "Resolved file path: " << filePath << '\n';
+    string body = readFile(filePath);
+    string httpResponse;
+
+    if (!body.empty()) {
+        httpResponse =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Content-Length: " + to_string(body.size()) + "\r\n"
+            "Connection: close\r\n"
+            "\r\n" +
+            body;
+    } else {
+        string notFoundBody =
+            "<!DOCTYPE html>"
+            "<html>"
+            "<head><title>404 Not Found</title></head>"
+            "<body>"
+            "<h1>404 Not Found</h1>"
+            "<p>The requested page does not exist.</p>"
+            "</body>"
+            "</html>";
+
+        httpResponse =
+            "HTTP/1.1 404 Not Found\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Content-Length: " + to_string(notFoundBody.size()) + "\r\n"
+            "Connection: close\r\n"
+            "\r\n" +
+            notFoundBody;
+    }
+
+    send(clientSocket, httpResponse.c_str(), httpResponse.size(), 0);
+    close(clientSocket);
 }
 
 int main() {
@@ -61,7 +125,7 @@ int main() {
         return 1;
     }
 
-    if (listen(serverSocket, 5) < 0) {
+    if (listen(serverSocket, 10) < 0) {
         cerr << "Listen failed\n";
         close(serverSocket);
         return 1;
@@ -79,63 +143,8 @@ int main() {
             continue;
         }
 
-        char buffer[BUFFER_SIZE];
-        memset(buffer, 0, sizeof(buffer));
-
-        ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-        if (bytesReceived <= 0) {
-            close(clientSocket);
-            continue;
-        }
-
-        string request(buffer);
-
-        cout << "\n--- HTTP REQUEST START ---\n";
-        cout << request << '\n';
-        cout << "--- HTTP REQUEST END ---\n\n";
-
-        string path = getRequestedPath(request);
-        string filePath;
-
-        if (path == "/") {
-            filePath = "site/index.html";
-        } else {
-            filePath = "site" + path;
-        }
-
-        string body = readFile(filePath);
-        string httpResponse;
-
-        if (!body.empty()) {
-            httpResponse =
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/html; charset=UTF-8\r\n"
-                "Content-Length: " + to_string(body.size()) + "\r\n"
-                "Connection: close\r\n"
-                "\r\n" +
-                body;
-        } else {
-            string notFoundBody =
-                "<!DOCTYPE html>"
-                "<html>"
-                "<head><title>404 Not Found</title></head>"
-                "<body>"
-                "<h1>404 Not Found</h1>"
-                "<p>The requested page does not exist.</p>"
-                "</body>"
-                "</html>";
-
-            httpResponse =
-                "HTTP/1.1 404 Not Found\r\n"
-                "Content-Type: text/html; charset=UTF-8\r\n"
-                "Content-Length: " + to_string(notFoundBody.size()) + "\r\n"
-                "Connection: close\r\n"
-                "\r\n" +
-                notFoundBody;
-        }
-
-        send(clientSocket, httpResponse.c_str(), httpResponse.size(), 0);
-        close(clientSocket);
+        thread clientThread(handleClient, clientSocket);
+        clientThread.detach();
     }
 
     close(serverSocket);
