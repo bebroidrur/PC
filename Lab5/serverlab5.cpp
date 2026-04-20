@@ -25,6 +25,13 @@ string readFile(const string& filePath) {
     return buffer.str();
 }
 
+string getMethod(const string& request) {
+    istringstream requestStream(request);
+    string method;
+    requestStream >> method;
+    return method;
+}
+
 string getRequestedPath(const string& request) {
     istringstream requestStream(request);
     string method;
@@ -51,6 +58,32 @@ void handleClient(int clientSocket) {
     cout << request << '\n';
     cout << "--- HTTP REQUEST END ---\n\n";
 
+    string method = getMethod(request);
+
+    if (method != "GET") {
+        string methodNotAllowedBody =
+            "<!DOCTYPE html>"
+            "<html>"
+            "<head><title>405 Method Not Allowed</title></head>"
+            "<body>"
+            "<h1>405 Method Not Allowed</h1>"
+            "<p>This server supports only GET requests.</p>"
+            "</body>"
+            "</html>";
+
+        string httpResponse =
+            "HTTP/1.1 405 Method Not Allowed\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Content-Length: " + to_string(methodNotAllowedBody.size()) + "\r\n"
+            "Connection: close\r\n"
+            "\r\n" +
+            methodNotAllowedBody;
+
+        send(clientSocket, httpResponse.c_str(), httpResponse.size(), 0);
+        close(clientSocket);
+        return;
+    }
+
     string path = getRequestedPath(request);
     string filePath;
 
@@ -61,8 +94,10 @@ void handleClient(int clientSocket) {
     } else {
         filePath = "site/" + path.substr(1);
     }
+
     cout << "Requested path: " << path << '\n';
     cout << "Resolved file path: " << filePath << '\n';
+
     string body = readFile(filePath);
     string httpResponse;
 
