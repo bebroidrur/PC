@@ -57,13 +57,7 @@ int main() {
         std::memset(buffer, 0, sizeof(buffer));
 
         ssize_t bytesReceived = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-
         if (bytesReceived <= 0) {
-            close(clientSocket);
-            continue;
-        }
-        if (bytesReceived < 0) {
-            std::cerr << "Receive failed\n";
             close(clientSocket);
             continue;
         }
@@ -71,6 +65,26 @@ int main() {
         std::cout << "\n--- HTTP REQUEST START ---\n";
         std::cout << buffer << '\n';
         std::cout << "--- HTTP REQUEST END ---\n\n";
+
+        std::string htmlBody =
+            "<!DOCTYPE html>"
+            "<html>"
+            "<head><title>Simple Server</title></head>"
+            "<body>"
+            "<h1>Hello from Lab5 server</h1>"
+            "<p>The HTTP response works correctly.</p>"
+            "</body>"
+            "</html>";
+
+        std::string httpResponse =
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: text/html; charset=UTF-8\r\n"
+            "Content-Length: " + std::to_string(htmlBody.size()) + "\r\n"
+            "Connection: close\r\n"
+            "\r\n" +
+            htmlBody;
+
+        send(clientSocket, httpResponse.c_str(), httpResponse.size(), 0);
 
         close(clientSocket);
     }
